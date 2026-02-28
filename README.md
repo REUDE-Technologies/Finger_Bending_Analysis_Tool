@@ -139,6 +139,7 @@ finger_analysis/
 ├── processing.py        # Data parsing, displacement, angles
 ├── db.py                # Supabase config storage
 ├── schema.sql           # Database schema (Supabase)
+├── Dockerfile           # Docker build for Railway
 ├── railway.json         # Railway deployment config
 ├── .python-version      # Python 3.11 for Railway
 ├── .env.example         # Env var template
