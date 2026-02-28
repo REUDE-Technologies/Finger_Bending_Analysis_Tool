@@ -6,7 +6,13 @@ bending measurements. Processes point tracking data at various pressure levels
 and computes displacement, bending angles, and statistics.
 """
 
+import logging
 from datetime import datetime
+
+# Suppress Streamlit "missing ScriptRunContext" in headless/Railway (expected in bare mode)
+logging.getLogger("streamlit.runtime.scriptrunner_utils.script_run_context").setLevel(
+    logging.ERROR
+)
 
 import pandas as pd
 import plotly.express as px

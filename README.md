@@ -26,9 +26,14 @@ Professional data extraction and compilation tool for soft robotic finger bendin
    |--------------------|--------------------------|
    | `SUPABASE_URL`     | Your Supabase Project URL |
    | `SUPABASE_ANON_KEY`| Your Supabase anon key   |
+   | `PORT`             | `8501` (matches Streamlit; required for Railway) |
 
-5. Go to **Settings** → **Networking** → **Generate Domain** to get your public URL
+5. Go to **Settings** → **Networking** → **Generate Domain**. Ensure the target port is **8501** (or matches `PORT`)
 6. Railway will build and deploy automatically
+
+**If the app shows "Application failed to respond" or the container keeps stopping:**  
+- Confirm **Variables** includes `PORT` = `8501` and **Networking** target port is **8501**.  
+- In deploy logs, *"missing ScriptRunContext! This warning can be ignored when running in bare mode"* is normal for Streamlit in headless mode and can be ignored.
 
 ---
 
