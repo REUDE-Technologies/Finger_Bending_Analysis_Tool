@@ -31,9 +31,11 @@ Professional data extraction and compilation tool for soft robotic finger bendin
 5. Go to **Settings** → **Networking** → **Generate Domain**. Ensure the target port is **8501** (or matches `PORT`)
 6. Railway will build and deploy automatically
 
-**If the app shows "Application failed to respond" or the container keeps stopping:**  
-- Confirm **Variables** includes `PORT` = `8501` and **Networking** target port is **8501**.  
-- In deploy logs, *"missing ScriptRunContext! This warning can be ignored when running in bare mode"* is normal for Streamlit in headless mode and can be ignored.
+**If the domain loads but the app doesn't respond (or container keeps stopping):**  
+1. **Variables** tab: add `PORT` = `8501` (Railway must pass this into the container).  
+2. **Settings → Networking**: for your public domain, set the **target port** to `8501` (same as `PORT`).  
+3. Redeploy. In logs you should see: `Starting Streamlit on 0.0.0.0:8501`.  
+- The log message *"missing ScriptRunContext! ..."* is normal in headless mode and can be ignored.
 
 ---
 
