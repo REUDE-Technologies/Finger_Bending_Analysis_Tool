@@ -135,20 +135,20 @@ def save_config(config: Dict[str, Any]) -> bool:
             "body_material": config.get("body_material", ""),
             "skin_material": config.get("skin_material", ""),
             "speed": config.get("speed", 0),
-            "designed_by": config.get("designed_by", ""),
-            "design_version": config.get("design_version", ""),
+            "prepared_by": config.get("prepared_by", ""),
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
 
-        client.table(TABLE_SAVED_CONFIGS).insert(row).execute()
-
-        # Persist dropdown values for future use
+        # Persist dropdown values FIRST, so they are saved even if config insert fails
         if row["finger_type"]:
             add_finger_type(row["finger_type"])
         if row["body_material"]:
             add_material(row["body_material"], "body")
         if row["skin_material"]:
             add_material(row["skin_material"], "skin")
+
+        # Now try to save the full configuration
+        client.table(TABLE_SAVED_CONFIGS).insert(row).execute()
 
         return True
     except Exception as e:

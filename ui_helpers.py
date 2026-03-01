@@ -73,23 +73,18 @@ def render_config(loaded: dict | None) -> tuple[dict, dict]:
             skin_mat = _select_or_add("Skin Material", sm_opts,
                                        loaded.get("skin_material", ""), "sm")
         with c6:
-            designed_by = st.text_input("Designed By",
-                                         value=loaded.get("designed_by", ""))
-
-        design_ver = st.text_input("Design Version",
-                                    value=loaded.get("design_version", ""))
+            prepared_by = st.text_input("Prepared By",
+                                         value=loaded.get("prepared_by", ""))
 
     disp = {
         "Finger": finger_type, "Finger Length (mm)": finger_length,
         "Body Material": body_mat, "Skin Material": skin_mat,
-        "Speed (m/s)": speed, "Designed By": designed_by,
-        "Design Version": design_ver,
+        "Speed (m/s)": speed, "Prepared By": prepared_by,
     }
     db = {
         "finger_type": finger_type, "finger_length": finger_length,
         "body_material": body_mat, "skin_material": skin_mat,
-        "speed": speed, "designed_by": designed_by,
-        "design_version": design_ver,
+        "speed": speed, "prepared_by": prepared_by,
     }
     return disp, db
 
