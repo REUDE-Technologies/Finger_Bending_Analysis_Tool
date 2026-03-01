@@ -11,8 +11,10 @@ Responsibilities:
 
 import io
 import math
+import os
 import re
 import zipfile
+from pathlib import Path
 from typing import Dict, List, Optional
 
 import numpy as np
@@ -90,6 +92,213 @@ def extract_zip(zip_bytes: bytes) -> Dict[str, bytes]:
             if basename.lower().endswith(".txt") and not basename.startswith("."):
                 result[basename] = zf.read(name)
     return result
+
+
+
+# ---------------------------------------------------------------------------
+# Simple ZIP extraction (flat — for per-pressure uploads)
+# ---------------------------------------------------------------------------
+def extract_zip(zip_bytes: bytes) -> Dict[str, bytes]:
+    """
+    Extract all .txt files from a ZIP into a flat {filename: content} dict.
+    Used when user uploads a ZIP for a single pressure level.
+    """
+    result: Dict[str, bytes] = {}
+    with zipfile.ZipFile(io.BytesIO(zip_bytes), "r") as zf:
+        for name in zf.namelist():
+            if name.endswith("/"):
+                continue
+            basename = name.split("/")[-1]
+            if basename.lower().endswith(".txt") and not basename.startswith("."):
+                result[basename] = zf.read(name)
+    return result
+
+
+# ---------------------------------------------------------------------------
+# ZIP structure scanning
+# ---------------------------------------------------------------------------
+def detect_pressure_from_path(path: str) -> Optional[int]:
+    """
+    Extract pressure level (kPa) from a folder or file path.
+
+    Recognises patterns like:
+      - '10/'  or '10kpa/'  or '10 kPa/'
+      - 'pressure_10/' or 'p10/'
+      - Direct numeric folder names
+    """
+    parts = [p.strip() for p in path.replace("\\", "/").split("/") if p.strip()]
+    if not parts:
+        return None
+
+    # Check each path component for a pressure indicator
+    for part in parts:
+        part_lower = part.lower().strip()
+
+        # Exact numeric folder name: '10', '20', '100', etc.
+        if re.fullmatch(r"\d+", part_lower):
+            val = int(part_lower)
+            if 1 <= val <= 200:
+                return val
+
+        # '10kpa', '10 kpa', '10_kpa', 'kpa10'
+        m = re.search(r"(\d+)\s*kpa", part_lower)
+        if m:
+            return int(m.group(1))
+        m = re.search(r"kpa\s*(\d+)", part_lower)
+        if m:
+            return int(m.group(1))
+
+        # 'pressure_10', 'pressure10', 'p_10'
+        m = re.search(r"pressure[_\s-]*(\d+)", part_lower)
+        if m:
+            return int(m.group(1))
+
+    return None
+
+
+def scan_zip_structure(
+    zip_bytes: bytes,
+) -> Dict[int, Dict[str, bytes]]:
+    """
+    Scan a ZIP archive and auto-detect pressure levels from folder structure.
+
+    Returns:
+        {pressure_kpa: {point_filename: content}}
+
+    Expected ZIP layouts:
+        data.zip/10/p1.txt          → pressure=10, point=p1
+        data.zip/20kpa/p1.txt       → pressure=20, point=p1
+        data.zip/pressure_30/p1.txt → pressure=30, point=p1
+    """
+    pressure_files: Dict[int, Dict[str, bytes]] = {}
+
+    with zipfile.ZipFile(io.BytesIO(zip_bytes), "r") as zf:
+        for name in zf.namelist():
+            # Skip directories
+            if name.endswith("/"):
+                continue
+
+            basename = name.split("/")[-1]
+
+            # Only process .txt files, ignore hidden files
+            if not basename.lower().endswith(".txt") or basename.startswith("."):
+                continue
+
+            # Detect pressure from the path (folder name)
+            pressure = detect_pressure_from_path(name)
+            if pressure is None:
+                continue
+
+            if pressure not in pressure_files:
+                pressure_files[pressure] = {}
+            pressure_files[pressure][basename] = zf.read(name)
+
+    return pressure_files
+
+
+def get_zip_summary(pressure_files: Dict[int, Dict[str, bytes]]) -> Dict:
+    """
+    Generate a summary of scanned ZIP contents.
+
+    Returns dict with:
+        - pressures: sorted list of detected pressure levels
+        - total_files: total number of point files
+        - points_per_pressure: {kpa: [sorted point names]}
+        - all_points: sorted list of all unique point names found
+    """
+    pressures = sorted(pressure_files.keys())
+    total_files = sum(len(v) for v in pressure_files.values())
+
+    points_per_pressure = {}
+    all_points = set()
+    for kpa in pressures:
+        point_names = sorted(
+            [f.replace(".txt", "").replace(".TXT", "").strip()
+             for f in pressure_files[kpa].keys()],
+            key=extract_point_number,
+        )
+        points_per_pressure[kpa] = point_names
+        all_points.update(point_names)
+
+    return {
+        "pressures": pressures,
+        "total_files": total_files,
+        "points_per_pressure": points_per_pressure,
+        "all_points": sorted(all_points, key=extract_point_number),
+    }
+
+
+def filter_pressure_files(
+    pressure_files: Dict[int, Dict[str, bytes]],
+    selected_pressures: List[int],
+    selected_points: Optional[List[str]] = None,
+) -> Dict[int, Dict[str, bytes]]:
+    """
+    Filter pressure_files dict to only include selected pressures and points.
+
+    Args:
+        pressure_files: full scanned data
+        selected_pressures: which pressure levels to keep
+        selected_points: which point names to keep (None = keep all)
+
+    Returns:
+        Filtered {kpa: {filename: content}}
+    """
+    result = {}
+    for kpa in selected_pressures:
+        if kpa not in pressure_files:
+            continue
+        if selected_points is None:
+            result[kpa] = pressure_files[kpa]
+        else:
+            filtered = {}
+            for fname, content in pressure_files[kpa].items():
+                point_name = fname.replace(".txt", "").replace(".TXT", "").strip()
+                if point_name in selected_points:
+                    filtered[fname] = content
+            if filtered:
+                result[kpa] = filtered
+    return result
+
+
+def scan_folder_structure(
+    folder_path: str,
+) -> Dict[int, Dict[str, bytes]]:
+    """
+    Scan a local folder and auto-detect pressure levels from subdirectories.
+
+    Expects the same layout as the ZIP:
+        folder/10/p1.txt          → pressure=10, point=p1
+        folder/20kpa/p1.txt       → pressure=20, point=p1
+
+    Returns:
+        {pressure_kpa: {point_filename: content}}
+    """
+    root = Path(folder_path)
+    if not root.is_dir():
+        raise ValueError(f"Path is not a directory: {folder_path}")
+
+    pressure_files: Dict[int, Dict[str, bytes]] = {}
+
+    for entry in root.iterdir():
+        if not entry.is_dir():
+            continue
+
+        # Detect pressure from folder name
+        pressure = detect_pressure_from_path(entry.name)
+        if pressure is None:
+            continue
+
+        # Read all .txt files in this pressure folder
+        files = {}
+        for txt_file in entry.iterdir():
+            if txt_file.is_file() and txt_file.suffix.lower() == ".txt" and not txt_file.name.startswith("."):
+                files[txt_file.name] = txt_file.read_bytes()
+
+        if files:
+            pressure_files[pressure] = files
+
+    return pressure_files
 
 
 # ---------------------------------------------------------------------------
@@ -363,25 +572,43 @@ def to_excel_bytes(
     """
     Export compiled data to Excel bytes.
 
-    Sheet "Data": config metadata + compiled data
-    Sheet "Summary": max displacement, std dev per point
+    Sheet "Data": A single filterable table.
+      - Config columns (Finger, Body Material …) are prepended to every row.
+      - Max displacement and max bending angle columns appear only in row 1;
+        remaining rows are blank for those metrics.
+    Sheet "Summary": detailed per-pressure statistics.
     """
     output = io.BytesIO()
 
+    df = compiled_df.copy()
+
+    # ── Prepend config columns to every row (skip if already in data) ──
+    for col_name, value in reversed(list(config.items())):
+        if col_name not in df.columns:
+            df.insert(0, col_name, value)
+
+    # ── Compute max metrics ──
+    disp_cols = [c for c in compiled_df.columns if c.endswith("_disp")]
+    max_metrics: Dict[str, object] = {}
+    for dc in disp_cols:
+        point_name = dc.replace("_disp", "").upper()
+        max_metrics[f"Max Disp {point_name} (mm)"] = round(compiled_df[dc].max(), 4)
+    if "angle1" in compiled_df.columns:
+        max_metrics["Max Angle1 (°)"] = round(compiled_df["angle1"].max(), 2)
+    if "angle2" in compiled_df.columns:
+        max_metrics["Max Angle2 (°)"] = round(compiled_df["angle2"].max(), 2)
+
+    # Add max-metric columns (populated only in the first row)
+    for col_name, value in max_metrics.items():
+        col_data = [None] * len(df)
+        col_data[0] = value
+        df[col_name] = col_data
+
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
-        config_df = pd.DataFrame([config])
-        config_df.to_excel(writer, sheet_name="Data", index=False, startrow=0)
-        compiled_df.to_excel(
-            writer,
-            sheet_name="Data",
-            index=False,
-            startrow=len(config_df) + 2,
-        )
+        df.to_excel(writer, sheet_name="Data", index=False)
 
         if summary_df is not None:
             summary_df.to_excel(writer, sheet_name="Summary", index=False)
 
     output.seek(0)
     return output.getvalue()
-
-
