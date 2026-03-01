@@ -393,38 +393,31 @@ def calculate_displacement(
 # ---------------------------------------------------------------------------
 # Bending angle (3-point method)
 # ---------------------------------------------------------------------------
-def calculate_angle_at_vertex(
-    vertex_x: float,
-    vertex_y: float,
-    ray1_x: float,
-    ray1_y: float,
-    ray2_x: float,
-    ray2_y: float,
-) -> float:
+def _calculate_angle_vectorized(
+    v_x: pd.Series, v_y: pd.Series,
+    r1_x: pd.Series, r1_y: pd.Series,
+    r2_x: pd.Series, r2_y: pd.Series
+) -> np.ndarray:
     """
-    Calculate angle at vertex formed by rays to ray1 and ray2.
-
-    Uses atan-based formula. Returns angle in degrees [0, 180].
+    Vectorized calculation of the vertex angle.
+    Substitutes the row-by-row calculation.
     """
-    numerator = (
-        ray1_y * (vertex_x - ray2_x)
-        + vertex_y * (ray2_x - ray1_x)
-        + ray2_y * (ray1_x - vertex_x)
-    )
-    denominator = (
-        (ray1_x - vertex_x) * (vertex_x - ray2_x)
-        + (ray1_y - vertex_y) * (vertex_y - ray2_y)
-    )
-
-    if abs(denominator) < DENOMINATOR_EPSILON:
-        return 90.0 if abs(numerator) > DENOMINATOR_EPSILON else 0.0
-
-    angle_rad = math.atan(numerator / denominator)
-    angle_deg = math.degrees(angle_rad)
-
-    if angle_deg < 0:
-        angle_deg += 180.0
-
+    num = r1_y * (v_x - r2_x) + v_y * (r2_x - r1_x) + r2_y * (r1_x - v_x)
+    den = (r1_x - v_x) * (v_x - r2_x) + (r1_y - v_y) * (v_y - r2_y)
+    
+    den_zero = np.abs(den) < DENOMINATOR_EPSILON
+    num_zero = np.abs(num) <= DENOMINATOR_EPSILON
+    
+    angle_deg = np.zeros(len(num), dtype=float)
+    valid = ~den_zero
+    
+    if valid.any():
+        angle_deg[valid] = np.degrees(np.arctan(num[valid] / den[valid]))
+        
+    angle_deg[den_zero & ~num_zero] = 90.0
+    angle_deg[den_zero & num_zero] = 0.0
+    
+    angle_deg = np.where(angle_deg < 0, angle_deg + 180.0, angle_deg)
     return angle_deg
 
 
@@ -438,27 +431,21 @@ def add_angle_columns(df: pd.DataFrame) -> pd.DataFrame:
     result = df.copy()
 
     vertex, r1, r2 = ANGLE1_DEFINITION
-    required = [f"{p}_x" for p in [vertex, r1, r2]] + [f"{p}_y" for p in [vertex, r1, r2]]
-    if all(c in result.columns for c in required):
-        result["angle1"] = result.apply(
-            lambda r: calculate_angle_at_vertex(
-                r[f"{vertex}_x"], r[f"{vertex}_y"],
-                r[f"{r1}_x"], r[f"{r1}_y"],
-                r[f"{r2}_x"], r[f"{r2}_y"],
-            ),
-            axis=1,
+    req1 = [f"{p}_x" for p in [vertex, r1, r2]] + [f"{p}_y" for p in [vertex, r1, r2]]
+    if all(c in result.columns for c in req1):
+        result["angle1"] = _calculate_angle_vectorized(
+            result[f"{vertex}_x"], result[f"{vertex}_y"],
+            result[f"{r1}_x"], result[f"{r1}_y"],
+            result[f"{r2}_x"], result[f"{r2}_y"]
         )
 
     vertex, r1, r2 = ANGLE2_DEFINITION
-    required = [f"{p}_x" for p in [vertex, r1, r2]] + [f"{p}_y" for p in [vertex, r1, r2]]
-    if all(c in result.columns for c in required):
-        result["angle2"] = result.apply(
-            lambda r: calculate_angle_at_vertex(
-                r[f"{vertex}_x"], r[f"{vertex}_y"],
-                r[f"{r1}_x"], r[f"{r1}_y"],
-                r[f"{r2}_x"], r[f"{r2}_y"],
-            ),
-            axis=1,
+    req2 = [f"{p}_x" for p in [vertex, r1, r2]] + [f"{p}_y" for p in [vertex, r1, r2]]
+    if all(c in result.columns for c in req2):
+        result["angle2"] = _calculate_angle_vectorized(
+            result[f"{vertex}_x"], result[f"{vertex}_y"],
+            result[f"{r1}_x"], result[f"{r1}_y"],
+            result[f"{r2}_x"], result[f"{r2}_y"]
         )
 
     return result

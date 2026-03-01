@@ -98,7 +98,32 @@ def render_config(loaded: dict | None) -> tuple[dict, dict]:
 # Sidebar
 # ═══════════════════════════════════════════════════════════════════════════
 def render_sidebar() -> None:
+    import psutil
+    
     with st.sidebar:
+        st.markdown("### 🖥️ System Resources")
+        cpu_usage = psutil.cpu_percent()
+        ram_usage = psutil.virtual_memory().percent
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("CPU", f"{cpu_usage}%")
+        with col2:
+            st.metric("RAM", f"{ram_usage}%")
+            
+        st.markdown("---")
+
+        st.markdown("### 📖 How to Use")
+        st.markdown(
+            "1. **Configure**: Fill in the test metadata.\n"
+            "2. **Upload**: Select **Upload ZIP** to auto-detect structure or **Select & Upload** to add files manually.\n"
+            "3. **Select**: Choose the specific pressures and tracking points you want to include.\n"
+            "4. **Process**: Click the blue button to analyze.\n"
+            "5. **Export**: Go to the **📥 Export** tab to download your Excel file."
+        )
+
+        st.markdown("---")
+        
         st.markdown("### ⚡ Quick Load")
         if DB_AVAILABLE:
             recent = get_recent_configs(10)
