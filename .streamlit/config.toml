@@ -1,14 +1,15 @@
 [theme]
 primaryColor = "#1B6CA8"
-backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F8FAFC"
-textColor = "#334155"
+backgroundColor = "#F8FAFD"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#0F172A"
 font = "sans serif"
+base = "light"
 
 [server]
-address = "0.0.0.0"
+address = "localhost"
 maxUploadSize = 50
-enableCORS = false
+enableCORS = true
 enableXsrfProtection = true
 
 [browser]
