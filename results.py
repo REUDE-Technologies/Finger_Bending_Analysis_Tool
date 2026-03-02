@@ -203,89 +203,86 @@ def _results_tabs(compiled, summary, pn, cfg):
                 fig.update_traces(line=dict(width=2.5))
                 st.plotly_chart(fig, use_container_width=True)
 
-        # ── Custom graphs: user-selectable X/Y with live preview + add/remove ──
+        # ── Maximum Displacement per Point Bar Chart ──
+        if disp_cols:
+            st.markdown("#### Maximum Displacement per Point")
+            
+            # Extract points we have disp for
+            max_disps = []
+            pt_names = []
+            for dp in disp_cols:
+                pt_prefix = dp.replace("_disp", "").upper()
+                pt_names.append(pt_prefix)
+                max_disps.append(compiled[dp].max())
+                
+            fig_bar = px.bar(
+                x=pt_names, y=max_disps,
+                labels={"x": "Tracking Point", "y": "Max Displacement (mm)"},
+                title="Maximum Displacement by Point",
+                color=pt_names, color_discrete_sequence=_CHART_COLORS
+            )
+            fig_bar.update_layout(
+                height=350, template="plotly_white",
+                font=dict(family="Inter, sans-serif", size=12),
+                title_font=dict(size=14, color="#1E293B"),
+                margin=dict(t=48, b=24, l=48, r=24),
+                plot_bgcolor="rgba(248,250,253,0.6)",
+                xaxis=dict(gridcolor="#F1F5F9", zerolinecolor="#E2E8F0"),
+                yaxis=dict(gridcolor="#F1F5F9", zerolinecolor="#E2E8F0"),
+                showlegend=False
+            )
+            st.plotly_chart(fig_bar, use_container_width=True)
+
+        # ── Custom graphs: Independent configurable rows ──
         st.markdown("#### Custom Graphs")
         numeric_cols = [
             c for c in compiled.columns
             if np.issubdtype(compiled[c].dtype, np.number)
         ]
         if len(numeric_cols) >= 2:
+            if "custom_graphs_count" not in st.session_state:
+                st.session_state["custom_graphs_count"] = 1
+            
+            bc1, bc2 = st.columns([1, 1])
+            with bc1:
+                if st.button("➕ Add graph", key="add_graph"):
+                    st.session_state["custom_graphs_count"] += 1
+            with bc2:
+                if st.button("➖ Remove last graph", key="remove_last_graph"):
+                    if st.session_state["custom_graphs_count"] > 1:
+                        st.session_state["custom_graphs_count"] -= 1
+
             default_x = "Time" if "Time" in numeric_cols else numeric_cols[0]
             x_idx = numeric_cols.index(default_x) if default_x in numeric_cols else 0
 
-            sc1, sc2 = st.columns(2)
-            with sc1:
-                x_col = st.selectbox("X axis", numeric_cols, index=x_idx, key="custom_x")
-            with sc2:
-                y_choices = [c for c in numeric_cols if c != x_col]
-                y_col = st.selectbox("Y axis", y_choices, key="custom_y")
-
-            # Live preview of the currently selected X/Y pair
-            pc1, pc2 = st.columns(2)
-            with pc1:
-                st.markdown(f"**Preview: {y_col} vs {x_col}**")
-            with pc2:
-                pass
-
-            fig_prev = px.line(
-                compiled,
-                x=x_col,
-                y=y_col,
-                color="Pressure (kPa)" if "Pressure (kPa)" in compiled.columns else None,
-                title=f"{y_col} vs {x_col}",
-                color_discrete_sequence=_CHART_COLORS,
-            )
-            fig_prev.update_layout(
-                height=320,
-                template="plotly_white",
-                font=dict(family="Inter, sans-serif", size=12),
-                title_font=dict(size=14, color="#1E293B"),
-                margin=dict(t=40, b=24, l=48, r=24),
-                legend=dict(orientation="h", yanchor="top", y=-0.18, font=dict(size=11)),
-                plot_bgcolor="rgba(248,250,253,0.6)",
-                xaxis=dict(gridcolor="#F1F5F9"),
-                yaxis=dict(gridcolor="#F1F5F9"),
-            )
-            fig_prev.update_traces(line=dict(width=2.0))
-            st.plotly_chart(fig_prev, use_container_width=True)
-
-            if "custom_graphs" not in st.session_state:
-                st.session_state["custom_graphs"] = []
-
-            bc1, bc2 = st.columns(2)
-            with bc1:
-                if st.button("Add graph", key="add_graph"):
-                    st.session_state["custom_graphs"].append({"x": x_col, "y": y_col})
-            with bc2:
-                if st.button("Remove last column", key="remove_last_graph"):
-                    if st.session_state["custom_graphs"]:
-                        st.session_state["custom_graphs"].pop()
-
-            # Render all saved graphs (added via "Add graph") below the preview
-            for i, cfg_g in enumerate(st.session_state["custom_graphs"]):
-                gx, gy = cfg_g["x"], cfg_g["y"]
-                st.markdown(f"**Graph {i + 1}: {gy} vs {gx}**")
-                fig = px.line(
-                    compiled,
-                    x=gx,
-                    y=gy,
-                    color="Pressure (kPa)" if "Pressure (kPa)" in compiled.columns else None,
-                    title=f"{gy} vs {gx}",
-                    color_discrete_sequence=_CHART_COLORS,
-                )
-                fig.update_layout(
-                    height=360,
-                    template="plotly_white",
-                    font=dict(family="Inter, sans-serif", size=12),
-                    title_font=dict(size=14, color="#1E293B"),
-                    margin=dict(t=40, b=24, l=48, r=24),
-                    legend=dict(orientation="h", yanchor="top", y=-0.18, font=dict(size=11)),
-                    plot_bgcolor="rgba(248,250,253,0.6)",
-                    xaxis=dict(gridcolor="#F1F5F9"),
-                    yaxis=dict(gridcolor="#F1F5F9"),
-                )
-                fig.update_traces(line=dict(width=2.0))
-                st.plotly_chart(fig, use_container_width=True)
+            for i in range(st.session_state["custom_graphs_count"]):
+                with st.container(border=True):
+                    sc1, sc2 = st.columns([0.3, 0.7])
+                    with sc1:
+                        st.markdown(f"**Graph {i + 1} Settings**")
+                        gx = st.selectbox("X axis", numeric_cols, index=x_idx, key=f"cg_x_{i}")
+                        y_choices = [c for c in numeric_cols if c != gx]
+                        y_def = y_choices[0] if len(y_choices) > 0 else numeric_cols[0]
+                        gy = st.selectbox("Y axis", y_choices, index=0, key=f"cg_y_{i}")
+                        
+                    with sc2:
+                        fig = px.line(
+                            compiled, x=gx, y=gy,
+                            color="Pressure (kPa)" if "Pressure (kPa)" in compiled.columns else None,
+                            title=f"{gy} vs {gx}",
+                            color_discrete_sequence=_CHART_COLORS,
+                        )
+                        fig.update_layout(
+                            height=360, template="plotly_white",
+                            font=dict(family="Inter, sans-serif", size=12),
+                            title_font=dict(size=14, color="#1E293B"),
+                            margin=dict(t=40, b=24, l=48, r=24),
+                            legend=dict(orientation="h", yanchor="top", y=-0.18, font=dict(size=11)),
+                            plot_bgcolor="rgba(248,250,253,0.6)",
+                            xaxis=dict(gridcolor="#F1F5F9"), yaxis=dict(gridcolor="#F1F5F9"),
+                        )
+                        fig.update_traces(line=dict(width=2.0))
+                        st.plotly_chart(fig, use_container_width=True)
 
     with tab_summary:
         st.markdown("#### Max Displacement & Statistics per Pressure")

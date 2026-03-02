@@ -58,10 +58,16 @@ def _run_processing(pf, speed, disp_cfg, db_cfg) -> bool:
         st.session_state[SESSION_POINT_NAMES] = pn
         st.session_state[SESSION_CONFIG] = disp_cfg
 
+        saved = False
         if DB_AVAILABLE:
-            save_config(db_cfg)
+            saved = save_config(db_cfg)
 
-        st.success(f"✅ Processed {len(pf)} pressure level(s) — {len(compiled)} rows")
+        if saved:
+            st.success(f"✅ Processed {len(pf)} pressure level(s) — {len(compiled)} rows. 💾 Config correctly saved to Supabase db!")
+        else:
+            st.success(f"✅ Processed {len(pf)} pressure level(s) — {len(compiled)} rows")
+            if DB_AVAILABLE:
+                st.warning("⚠️ Could not save your run configuration to Supabase.")
         return True
     except Exception as e:
         st.error(f"❌ Processing failed: {e}")
