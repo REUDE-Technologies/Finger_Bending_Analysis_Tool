@@ -57,6 +57,10 @@ def render_config(loaded: dict | None) -> tuple[dict, dict]:
                 "Finger Length (mm)", min_value=0.0, step=1.0,
                 value=float(loaded.get("finger_length", 0)),
             )
+            finger_width = st.number_input(
+                "Finger Width (mm)", min_value=0.0, step=1.0,
+                value=float(loaded.get("finger_width", 0)),
+            )
         with c3:
             speed = st.number_input(
                 "Speed (m/s)", min_value=0.0, step=0.01, format="%.2f",
@@ -78,11 +82,13 @@ def render_config(loaded: dict | None) -> tuple[dict, dict]:
 
     disp = {
         "Finger": finger_type, "Finger Length (mm)": finger_length,
+        "Finger Width (mm)": finger_width,
         "Body Material": body_mat, "Skin Material": skin_mat,
         "Speed (m/s)": speed, "Prepared By": prepared_by,
     }
     db = {
         "finger_type": finger_type, "finger_length": finger_length,
+        "finger_width": finger_width,
         "body_material": body_mat, "skin_material": skin_mat,
         "speed": speed, "prepared_by": prepared_by,
     }

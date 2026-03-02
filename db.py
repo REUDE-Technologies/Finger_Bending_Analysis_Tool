@@ -138,6 +138,7 @@ def save_config(config: Dict[str, Any]) -> bool:
         row = {
             "finger_type": config.get("finger_type", ""),
             "finger_length": config.get("finger_length", 0),
+            "finger_width": config.get("finger_width", 0),
             "body_material": config.get("body_material", ""),
             "skin_material": config.get("skin_material", ""),
             "speed": config.get("speed", 0),
