@@ -19,11 +19,11 @@ CREATE TABLE IF NOT EXISTS saved_configs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     finger_type TEXT,
     finger_length REAL,
+    finger_width REAL,
     body_material TEXT,
     skin_material TEXT,
     speed REAL DEFAULT 0,
-    designed_by TEXT DEFAULT '',
-    design_version TEXT DEFAULT '',
+    prepared_by TEXT DEFAULT '',
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
