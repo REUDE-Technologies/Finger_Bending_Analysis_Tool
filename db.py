@@ -43,8 +43,14 @@ def get_client():
     if _client is None:
         if not SUPABASE_URL or not SUPABASE_KEY:
             return None
+        
+        # Auto-format URL if just the project ref was provided
+        url = SUPABASE_URL
+        if not url.startswith("http"):
+            url = f"https://{url}.supabase.co"
+            
         from supabase import create_client
-        _client = create_client(SUPABASE_URL, SUPABASE_KEY)
+        _client = create_client(url, SUPABASE_KEY)
     return _client
 
 
