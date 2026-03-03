@@ -7,7 +7,7 @@ font = "sans serif"
 base = "light"
 
 [server]
-address = "0.0.0.0"
+address = "localhost"
 maxUploadSize = 50
 enableCORS = true
 enableXsrfProtection = true
