@@ -126,11 +126,18 @@ def render_sidebar() -> None:
         st.markdown("---")
         
         st.markdown("### ⚡ Quick Load")
+        from streamlit import config
+        try:
+            host_addr = config.get_option("server.address")
+            st.caption(f"Server Binding: `{host_addr}`")
+        except Exception:
+            pass
+
         if DB_AVAILABLE:
             recent = get_recent_configs(10)
             if recent:
                 labels = [
-                    f"{r.get('finger_type','?')} · {r.get('body_material','?')} · {r.get('created_at','')[:10]}"
+                    f"{r.get('finger_type','?')} · W:{r.get('finger_width','?')} · By: {r.get('prepared_by','')[:10]}"
                     for r in recent
                 ]
                 sel = st.selectbox("Load previous config", ["— New —"] + labels)
