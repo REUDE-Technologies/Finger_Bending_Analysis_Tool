@@ -243,15 +243,6 @@ def _results_tabs(compiled, summary, pn, cfg):
             if "custom_graphs_count" not in st.session_state:
                 st.session_state["custom_graphs_count"] = 1
             
-            bc1, bc2 = st.columns([1, 1])
-            with bc1:
-                if st.button("➕ Add graph", key="add_graph"):
-                    st.session_state["custom_graphs_count"] += 1
-            with bc2:
-                if st.button("➖ Remove last graph", key="remove_last_graph"):
-                    if st.session_state["custom_graphs_count"] > 1:
-                        st.session_state["custom_graphs_count"] -= 1
-
             default_x = "Time" if "Time" in numeric_cols else numeric_cols[0]
             x_idx = numeric_cols.index(default_x) if default_x in numeric_cols else 0
 
@@ -283,6 +274,15 @@ def _results_tabs(compiled, summary, pn, cfg):
                         )
                         fig.update_traces(line=dict(width=2.0))
                         st.plotly_chart(fig, use_container_width=True)
+
+            bc1, bc2 = st.columns([1, 1])
+            with bc1:
+                if st.button("➕ Add graph", key="add_graph"):
+                    st.session_state["custom_graphs_count"] += 1
+            with bc2:
+                if st.button("➖ Remove last graph", key="remove_last_graph"):
+                    if st.session_state["custom_graphs_count"] > 1:
+                        st.session_state["custom_graphs_count"] -= 1
 
     with tab_summary:
         st.markdown("#### Max Displacement & Statistics per Pressure")
