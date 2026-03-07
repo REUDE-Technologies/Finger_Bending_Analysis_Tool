@@ -128,25 +128,31 @@ def add_material(name: str, material_type: str = "body") -> bool:
 # ---------------------------------------------------------------------------
 # Saved configurations
 # ---------------------------------------------------------------------------
-def save_config(config: Dict[str, Any]) -> bool:
-    """Save a test configuration for future reuse."""
+def save_config(config: Dict[str, Any]) -> tuple[bool, str | None]:
+    """
+    Save a test configuration for future reuse.
+    Returns (True, None) on success, (False, error_message) on failure.
+    """
     try:
         client = get_client()
         if not client:
-            return False
+            return (
+                False,
+                "Supabase not configured. Set SUPABASE_URL and SUPABASE_ANON_KEY in .env (local) or in Railway Variables (deploy).",
+            )
 
+        # Match schema: TEXT and REAL types; ensure numerics are float for Supabase
         row = {
-            "finger_type": config.get("finger_type", ""),
-            "finger_length": config.get("finger_length", 0),
-            "finger_width": config.get("finger_width", 0),
-            "body_material": config.get("body_material", ""),
-            "skin_material": config.get("skin_material", ""),
-            "speed": config.get("speed", 0),
-            "prepared_by": config.get("prepared_by", ""),
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "finger_type": str(config.get("finger_type") or "").strip() or None,
+            "finger_length": float(config.get("finger_length", 0) or 0),
+            "finger_width": float(config.get("finger_width", 0) or 0),
+            "body_material": str(config.get("body_material") or "").strip() or None,
+            "skin_material": str(config.get("skin_material") or "").strip() or None,
+            "speed": float(config.get("speed", 0) or 0),
+            "prepared_by": str(config.get("prepared_by") or "").strip() or "",
         }
 
-        # Persist dropdown values FIRST, so they are saved even if config insert fails
+        # Persist dropdown values first so they exist for future loads
         if row["finger_type"]:
             add_finger_type(row["finger_type"])
         if row["body_material"]:
@@ -154,13 +160,13 @@ def save_config(config: Dict[str, Any]) -> bool:
         if row["skin_material"]:
             add_material(row["skin_material"], "skin")
 
-        # Now try to save the full configuration
+        # Insert; created_at uses DB default if we don't send it
         client.table(TABLE_SAVED_CONFIGS).insert(row).execute()
-
-        return True
+        return (True, None)
     except Exception as e:
-        logger.warning("Failed to save config: %s", e)
-        return False
+        err_msg = str(e).strip() or repr(e)
+        logger.warning("Failed to save config: %s", err_msg)
+        return (False, err_msg)
 
 
 def get_recent_configs(limit: int = 20) -> List[Dict]:
