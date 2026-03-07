@@ -15,8 +15,9 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-# Sample/data ZIPs (do not commit)
+# Sample/data ZIPs (do not commit; exception: one optional sample for deployed app)
 *.zip
+!sample_finger_data.zip
 
 # DL training saved runs (optional: remove to version runs)
 dl_training_runs/

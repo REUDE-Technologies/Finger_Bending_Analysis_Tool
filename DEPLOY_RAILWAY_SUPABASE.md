@@ -45,8 +45,7 @@ This project is already set up for deployment (Dockerfile, `entrypoint.sh`, `rai
    - Go to [railway.app](https://railway.app) → Sign in
    - **New Project** → **Deploy from GitHub repo**
    - Select the repo you pushed in step 4
-   - If the app lives in a **subfolder** (e.g. only `Finger_Bending_Analysis_Tool` is the app):
-     - Click the new service → **Settings** → **Root Directory** → set to that subfolder (e.g. `Finger_Bending_Analysis_Tool`)
+   - **Root Directory:** Leave **empty** (or `.`) so Railway builds from the **repo root**. This repo has `app.py`, `dl_model_tab.py`, `esn_model_tab.py`, etc. at the root. If Root Directory is set to a subfolder (e.g. `finger_analysis`) that doesn’t contain the full app, you’ll get an old build without DL/ESN tabs.
 
 6. **Set environment variables**
    - In the Railway service → **Variables** tab → **Add Variable** (or **RAW Editor**)
@@ -97,3 +96,21 @@ This project is already set up for deployment (Dockerfile, `entrypoint.sh`, `rai
 
 - **App not loading:** Confirm **Variables** has `PORT` = `8501` and **Networking** target port is **8501**. Redeploy and check logs for `Starting Streamlit on 0.0.0.0:8501`.
 - **Config not saving:** Confirm `SUPABASE_URL` and `SUPABASE_ANON_KEY` are set in Railway Variables and that you ran the full `schema.sql` (including RLS policies) in Supabase.
+
+---
+
+## Railway shows old version or missing DL / ESN tabs
+
+1. **Use the correct repo and branch**
+   - Railway → your service → **Settings** → confirm it’s connected to the repo that has the full app (e.g. `REUDE-Technologies/Finger_Bending_Analysis_Tool` or `Kandan007/Testing`) and branch **main**.
+
+2. **Root Directory must be the app root**
+   - **Settings** → **Root Directory**
+   - Set to **empty** or `.` (repo root). The Dockerfile and all files (`app.py`, `dl_model_tab.py`, `esn_model_tab.py`, etc.) must be at that path. If you had a subfolder like `finger_analysis` before, clear it so the root is used.
+
+3. **Trigger a fresh deploy**
+   - **Deployments** → open the latest deployment → **Redeploy** (or push a small commit to `main`).
+   - If available, use **“Clear build cache”** or **“Redeploy from scratch”** so the image is rebuilt from the current repo.
+
+4. **Check build logs**
+   - In the build log you should see `COPY . .` copying the repo and `pip install -r requirements.txt` including `torch`, `scikit-learn`, `plotly`. If the build fails on `torch` (e.g. out of memory), the DL tab will show “requires PyTorch”; consider increasing Railway plan or using a CPU-only torch wheel.
