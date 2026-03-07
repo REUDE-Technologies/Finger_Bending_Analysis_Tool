@@ -4,7 +4,10 @@ Upload module — dual-mode upload (ZIP auto-detect / per-pressure).
 Exports:
     render_upload()  → returns {kpa: {filename: bytes}} or None
 """
+import os
 import re
+from pathlib import Path
+
 import streamlit as st
 from styles import section
 from processing import (
@@ -39,6 +42,33 @@ def _extract_point_name(filename: str) -> str | None:
     """Extract point name from filename. e.g. 'p1.txt' → 'p1'."""
     m = re.match(r"(p\d+)", filename.lower().replace(".txt", ""))
     return m.group(1) if m else None
+
+
+def _get_local_zip_options() -> list[tuple[str, str]]:
+    """
+    Scan app folder and optional 'data' subfolder for .zip files.
+    Returns list of (display_label, absolute_path) for use in a selectbox.
+    """
+    out: list[tuple[str, str]] = []
+    seen_basenames: set[str] = set()
+    # Search cwd (folder from which streamlit is run) and cwd/data
+    cwd = Path(os.getcwd())
+    for base_dir in [cwd, cwd / "data"]:
+        if not base_dir.is_dir():
+            continue
+        try:
+            for path in sorted(base_dir.iterdir()):
+                if path.suffix.lower() != ".zip" or not path.is_file():
+                    continue
+                name = path.name
+                if name in seen_basenames:
+                    continue
+                seen_basenames.add(name)
+                label = name if base_dir == cwd else f"data/{name}"
+                out.append((label, str(path.resolve())))
+        except OSError:
+            continue
+    return out
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -328,12 +358,12 @@ def render_upload_tab():
 
 
 def _upload_tab_zip():
-    """ZIP mode: upload ZIP, scan, store _scanned_pf. No selection yet."""
+    """ZIP mode: use a ZIP from folder or upload one, scan, store _scanned_pf."""
     st.markdown(
         '<div class="upload-hero">'
         '<div class="u-icon">📦</div>'
         '<p class="u-title">Upload ZIP folder</p>'
-        '<p class="u-desc">Upload a ZIP file containing pressure-level subfolders '
+        '<p class="u-desc">Use a ZIP from this folder or upload one. ZIP must contain pressure-level subfolders '
         '(e.g. 10 kpa/, 30kpa/) with point .txt files — everything is detected automatically</p>'
         '<span class="fmt-pill">.ZIP</span>'
         '<span class="fmt-pill">AUTO-DETECT</span>'
@@ -341,20 +371,51 @@ def _upload_tab_zip():
         unsafe_allow_html=True,
     )
 
+    # ── Option 1: Use ZIP from project folder ──
+    local_zips = _get_local_zip_options()
+    local_options = ["— Select a ZIP from this folder —"] + [label for label, _ in local_zips]
+    selected_local = st.selectbox(
+        "ZIP files in this folder",
+        options=range(len(local_options)),
+        format_func=lambda i: local_options[i],
+        key="tab_zip_local_select",
+        index=0,
+    )
+    use_local_path: str | None = None
+    if selected_local and selected_local > 0 and local_zips:
+        _, use_local_path = local_zips[selected_local - 1]
+
+    # ── Option 2: Upload a new ZIP ──
     uploaded = st.file_uploader(
-        "Upload ZIP", type=["zip"],
-        accept_multiple_files=False, key="tab_zip_upload",
+        "Or upload a new ZIP",
+        type=["zip"],
+        accept_multiple_files=False,
+        key="tab_zip_upload",
         label_visibility="collapsed",
     )
 
-    if not uploaded:
+    # Decide data source: upload wins over local selection
+    data: bytes | None = None
+    zip_display_name: str = "ZIP"
+    if uploaded:
+        data = uploaded.read()
+        zip_display_name = uploaded.name
+    elif use_local_path:
+        try:
+            with open(use_local_path, "rb") as f:
+                data = f.read()
+            zip_display_name = Path(use_local_path).name
+        except Exception as e:
+            st.error(f"❌ Could not read file: {e}")
+            return
+
+    if not data:
         if "_scanned_pf" in st.session_state:
             del st.session_state["_scanned_pf"]
         if "_upload_mode" in st.session_state:
             del st.session_state["_upload_mode"]
         return
 
-    data = uploaded.read()
     try:
         pf = scan_zip_structure(data)
     except Exception as e:
@@ -375,7 +436,7 @@ def _upload_tab_zip():
 
     st.markdown(
         f'<div class="scan-ok">'
-        f'<h4>✅ Scan Complete — {uploaded.name}</h4>'
+        f'<h4>✅ Scan Complete — {zip_display_name}</h4>'
         f'<div class="scan-kpis">'
         f'<div class="kpi"><div class="num">{len(summ["pressures"])}</div><div class="tag">Pressures</div></div>'
         f'<div class="kpi"><div class="num">{len(summ["all_points"])}</div><div class="tag">Points</div></div>'

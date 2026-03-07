@@ -14,3 +14,11 @@ __pycache__/
 # OS
 .DS_Store
 Thumbs.db
+
+# Sample/data ZIPs (do not commit)
+*.zip
+
+# DL training saved runs (optional: remove to version runs)
+dl_training_runs/
+# ESN training saved runs
+esn_training_runs/

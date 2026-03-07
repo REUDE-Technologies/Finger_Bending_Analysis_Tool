@@ -11,6 +11,8 @@ address = "localhost"
 maxUploadSize = 50
 enableCORS = true
 enableXsrfProtection = true
+# "poll" = check for file changes periodically (avoids Mac/OneDrive FSEvents crash; still auto-reloads)
+fileWatcherType = "poll"
 
 [browser]
 gatherUsageStats = false

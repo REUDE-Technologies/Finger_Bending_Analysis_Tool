@@ -399,25 +399,23 @@ def _calculate_angle_vectorized(
     r2_x: pd.Series, r2_y: pd.Series
 ) -> np.ndarray:
     """
-    Vectorized calculation of the vertex angle.
-    Substitutes the row-by-row calculation.
+    Vectorized calculation of the interior angle at vertex V between rays V->R1 and V->R2.
+    Returns angle in [0, 180] degrees. More bending => smaller angle (so pressure up => angle down).
     """
-    num = r1_y * (v_x - r2_x) + v_y * (r2_x - r1_x) + r2_y * (r1_x - v_x)
-    den = (r1_x - v_x) * (v_x - r2_x) + (r1_y - v_y) * (v_y - r2_y)
-    
-    den_zero = np.abs(den) < DENOMINATOR_EPSILON
-    num_zero = np.abs(num) <= DENOMINATOR_EPSILON
-    
-    angle_deg = np.zeros(len(num), dtype=float)
-    valid = ~den_zero
-    
-    if valid.any():
-        angle_deg[valid] = np.degrees(np.arctan(num[valid] / den[valid]))
-        
-    angle_deg[den_zero & ~num_zero] = 90.0
-    angle_deg[den_zero & num_zero] = 0.0
-    
-    angle_deg = np.where(angle_deg < 0, angle_deg + 180.0, angle_deg)
+    # Vectors from vertex to ray endpoints
+    ax = r1_x - v_x
+    ay = r1_y - v_y
+    bx = r2_x - v_x
+    by = r2_y - v_y
+    # Dot product and cross product (2D)
+    dot = ax * bx + ay * by
+    cross = ax * by - ay * bx
+    # Interior angle in [0, pi]: atan2(|cross|, dot); avoid zero denominator
+    dot_safe = np.maximum(np.asarray(dot, dtype=float), 1e-12)
+    angle_rad = np.arctan2(np.abs(np.asarray(cross, dtype=float)), dot_safe)
+    angle_deg = np.degrees(angle_rad)
+    # Clamp to [0, 180] (numerical noise can push slightly past)
+    angle_deg = np.clip(angle_deg, 0.0, 180.0)
     return angle_deg
 
 
