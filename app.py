@@ -68,23 +68,15 @@ def _run_processing(pf, speed, disp_cfg, db_cfg) -> bool:
         st.session_state[SESSION_CONFIG] = disp_cfg
 
         saved = False
-        save_err = None
         if DB_AVAILABLE:
-            saved, save_err = save_config(db_cfg)
+            saved = save_config(db_cfg)
 
         if saved:
             st.success(f"✅ Processed {len(pf)} pressure level(s) — {len(compiled)} rows. 💾 Config saved to Supabase.")
         else:
             st.success(f"✅ Processed {len(pf)} pressure level(s) — {len(compiled)} rows")
-            if DB_AVAILABLE and save_err:
+            if DB_AVAILABLE:
                 st.warning("⚠️ Could not save your run configuration to Supabase.")
-                with st.expander("Why? How to fix."):
-                    st.code(save_err, language=None)
-                    st.markdown(
-                        "1. **Env vars**: In this folder create a `.env` with `SUPABASE_URL` and `SUPABASE_ANON_KEY` (from Supabase → Project Settings → API).\n"
-                        "2. **Schema**: In Supabase **SQL Editor**, run the full contents of `schema.sql` to create tables and RLS policies.\n"
-                        "3. **Policies**: RLS must allow `anon` to INSERT; the script adds policies for `finger_types`, `materials`, and `saved_configs`."
-                    )
         return True
     except Exception as e:
         st.error(f"❌ Processing failed: {e}")

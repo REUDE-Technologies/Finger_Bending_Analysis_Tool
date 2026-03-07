@@ -128,18 +128,12 @@ def add_material(name: str, material_type: str = "body") -> bool:
 # ---------------------------------------------------------------------------
 # Saved configurations
 # ---------------------------------------------------------------------------
-def save_config(config: Dict[str, Any]) -> tuple[bool, str | None]:
-    """
-    Save a test configuration for future reuse.
-    Returns (True, None) on success, (False, error_message) on failure.
-    """
+def save_config(config: Dict[str, Any]) -> bool:
+    """Save a test configuration for future reuse."""
     try:
         client = get_client()
         if not client:
-            return (
-                False,
-                "Supabase not configured. Set SUPABASE_URL and SUPABASE_ANON_KEY in .env (local) or in Railway Variables (deploy).",
-            )
+            return False
 
         # Match schema: TEXT and REAL types; ensure numerics are float for Supabase
         row = {
@@ -162,11 +156,10 @@ def save_config(config: Dict[str, Any]) -> tuple[bool, str | None]:
 
         # Insert; created_at uses DB default if we don't send it
         client.table(TABLE_SAVED_CONFIGS).insert(row).execute()
-        return (True, None)
+        return True
     except Exception as e:
-        err_msg = str(e).strip() or repr(e)
-        logger.warning("Failed to save config: %s", err_msg)
-        return (False, err_msg)
+        logger.warning("Failed to save config: %s", e)
+        return False
 
 
 def get_recent_configs(limit: int = 20) -> List[Dict]:
