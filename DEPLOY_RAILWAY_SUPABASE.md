@@ -47,15 +47,17 @@ This project is already set up for deployment (Dockerfile, `entrypoint.sh`, `rai
    - Select the repo you pushed in step 4
    - **Root Directory:** Leave **empty** (or `.`) so Railway builds from the **repo root**. This repo has `app.py`, `dl_model_tab.py`, `esn_model_tab.py`, etc. at the root. If Root Directory is set to a subfolder (e.g. `finger_analysis`) that doesn’t contain the full app, you’ll get an old build without DL/ESN tabs.
 
-6. **Set environment variables**
+6. **Set environment variables (required for config save to work)**
    - In the Railway service → **Variables** tab → **Add Variable** (or **RAW Editor**)
-   - Add:
+   - Add these **exact** names and your real values (same as in your local `.env`):
 
    | Variable            | Value                          |
    |---------------------|--------------------------------|
    | `PORT`              | `8501`                         |
-   | `SUPABASE_URL`      | Your Supabase Project URL      |
-   | `SUPABASE_ANON_KEY` | Your Supabase anon public key  |
+   | `SUPABASE_URL`      | Your Supabase Project URL (e.g. `https://xxxxx.supabase.co`) |
+   | `SUPABASE_ANON_KEY` | Your Supabase **anon public** key (long JWT from Project Settings → API) |
+
+   **Tip:** Copy the values from your local `.env` and paste them into Railway Variables. Do not commit `.env`; only set these in Railway’s UI.
 
 7. **Get a public URL**
    - **Settings** → **Networking** → **Public Networking**
