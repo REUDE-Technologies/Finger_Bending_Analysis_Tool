@@ -94,6 +94,23 @@ def render_config(loaded: dict | None) -> tuple[dict, dict]:
             prepared_by = st.text_input("Prepared By",
                                          value=values.get("prepared_by", ""))
 
+        # Save current config to Supabase so it persists (survives refresh / Railway restart)
+        if DB_AVAILABLE:
+            if st.button("💾 Save config to Supabase", key="config_save_btn", help="Save current form to the database so you can load it later from the sidebar."):
+                from db import save_config
+                db_cfg = {
+                    "finger_type": finger_type, "finger_length": finger_length,
+                    "finger_width": finger_width, "body_material": body_mat,
+                    "skin_material": skin_mat, "speed": speed, "prepared_by": prepared_by,
+                }
+                ok, err = save_config(db_cfg)
+                if ok:
+                    st.success("Config saved. Use **Load previous config** in the sidebar to restore it.")
+                else:
+                    st.error(f"Could not save: {err}")
+                    with st.expander("Details"):
+                        st.code(err, language=None)
+
     disp = {
         "Finger": finger_type, "Finger Length (mm)": finger_length,
         "Finger Width (mm)": finger_width,

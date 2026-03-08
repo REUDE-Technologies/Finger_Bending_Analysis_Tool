@@ -76,6 +76,18 @@ CREATE POLICY "Allow anon all on saved_configs"
     USING (true) WITH CHECK (true);
 
 -- ---------------------------------------------------------------------------
+-- Migration: add missing columns (for DBs created with older schema)
+-- Run this if you see PGRST204 "Could not find the 'finger_width' column"
+-- ---------------------------------------------------------------------------
+ALTER TABLE saved_configs ADD COLUMN IF NOT EXISTS finger_type TEXT;
+ALTER TABLE saved_configs ADD COLUMN IF NOT EXISTS finger_length REAL;
+ALTER TABLE saved_configs ADD COLUMN IF NOT EXISTS finger_width REAL;
+ALTER TABLE saved_configs ADD COLUMN IF NOT EXISTS body_material TEXT;
+ALTER TABLE saved_configs ADD COLUMN IF NOT EXISTS skin_material TEXT;
+ALTER TABLE saved_configs ADD COLUMN IF NOT EXISTS speed REAL DEFAULT 0;
+ALTER TABLE saved_configs ADD COLUMN IF NOT EXISTS prepared_by TEXT DEFAULT '';
+
+-- ---------------------------------------------------------------------------
 -- Seed defaults (idempotent)
 -- ---------------------------------------------------------------------------
 INSERT INTO finger_types (name) VALUES ('Finger 1'), ('Finger 2') ON CONFLICT (name) DO NOTHING;
