@@ -12,12 +12,14 @@ Tables:
 
 import logging
 import os
-from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List
 
 from dotenv import load_dotenv
 
-load_dotenv()
+# Load .env from app directory so it works regardless of CWD (local run or Streamlit)
+_app_dir = Path(__file__).resolve().parent
+load_dotenv(_app_dir / ".env")
 
 logger = logging.getLogger(__name__)
 
@@ -25,9 +27,9 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_URL = (os.getenv("SUPABASE_URL") or "").strip()
 SUPABASE_KEY = (
-    os.getenv("SUPABASE_ANON_KEY", "") or os.getenv("SUPABASE_SERVICE_KEY", "")
+    (os.getenv("SUPABASE_ANON_KEY") or os.getenv("SUPABASE_SERVICE_KEY") or "").strip()
 )
 
 TABLE_FINGER_TYPES = "finger_types"
@@ -42,13 +44,19 @@ def get_client():
     global _client
     if _client is None:
         if not SUPABASE_URL or not SUPABASE_KEY:
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "Supabase skipped: SUPABASE_URL=%s, SUPABASE_ANON_KEY=%s",
+                    "set" if SUPABASE_URL else "missing",
+                    "set" if SUPABASE_KEY else "missing",
+                )
             return None
-        
+
         # Auto-format URL if just the project ref was provided
         url = SUPABASE_URL
         if not url.startswith("http"):
             url = f"https://{url}.supabase.co"
-            
+
         from supabase import create_client
         _client = create_client(url, SUPABASE_KEY)
     return _client
@@ -128,12 +136,20 @@ def add_material(name: str, material_type: str = "body") -> bool:
 # ---------------------------------------------------------------------------
 # Saved configurations
 # ---------------------------------------------------------------------------
-def save_config(config: Dict[str, Any]) -> bool:
-    """Save a test configuration for future reuse."""
+def save_config(config: Dict[str, Any]) -> tuple[bool, str | None]:
+    """
+    Save a test configuration for future reuse.
+    Returns (True, None) on success, (False, error_message) on failure.
+    """
     try:
         client = get_client()
         if not client:
-            return False
+            missing = []
+            if not SUPABASE_URL:
+                missing.append("SUPABASE_URL")
+            if not SUPABASE_KEY:
+                missing.append("SUPABASE_ANON_KEY")
+            return (False, f"Missing: {', '.join(missing)}. Set in .env (local) or Railway Variables.")
 
         # Match schema: TEXT and REAL types; ensure numerics are float for Supabase
         row = {
@@ -146,20 +162,31 @@ def save_config(config: Dict[str, Any]) -> bool:
             "prepared_by": str(config.get("prepared_by") or "").strip() or "",
         }
 
-        # Persist dropdown values first so they exist for future loads
-        if row["finger_type"]:
-            add_finger_type(row["finger_type"])
-        if row["body_material"]:
-            add_material(row["body_material"], "body")
-        if row["skin_material"]:
-            add_material(row["skin_material"], "skin")
-
-        # Insert; created_at uses DB default if we don't send it
+        # Insert main config first so save succeeds even if finger_types/materials fail
         client.table(TABLE_SAVED_CONFIGS).insert(row).execute()
-        return True
+
+        # Optionally persist dropdown values (ignore failures so config is already saved)
+        if row["finger_type"]:
+            try:
+                add_finger_type(row["finger_type"])
+            except Exception:
+                pass
+        if row["body_material"]:
+            try:
+                add_material(row["body_material"], "body")
+            except Exception:
+                pass
+        if row["skin_material"]:
+            try:
+                add_material(row["skin_material"], "skin")
+            except Exception:
+                pass
+
+        return (True, None)
     except Exception as e:
-        logger.warning("Failed to save config: %s", e)
-        return False
+        err = str(e).strip() or repr(e)
+        logger.warning("Failed to save config: %s", err)
+        return (False, err)
 
 
 def get_recent_configs(limit: int = 20) -> List[Dict]:
