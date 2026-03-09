@@ -363,64 +363,92 @@ def _upload_tab_zip():
         '<div class="upload-hero">'
         '<div class="u-icon">📦</div>'
         '<p class="u-title">Upload ZIP folder</p>'
-        '<p class="u-desc">Use a ZIP from this folder or upload one. ZIP must contain pressure-level subfolders '
-        '(e.g. 10 kpa/, 30kpa/) with point .txt files — everything is detected automatically</p>'
+        '<p class="u-desc">Select one or more ZIPs from this folder and/or upload multiple ZIPs. '
+        'Selected and uploaded files are combined and appear in the Select tab. '
+        'Each ZIP must contain pressure-level subfolders (e.g. 10 kpa/, 30kpa/) with point .txt files.</p>'
         '<span class="fmt-pill">.ZIP</span>'
         '<span class="fmt-pill">AUTO-DETECT</span>'
         '</div>',
         unsafe_allow_html=True,
     )
 
-    # ── Option 1: Use ZIP from project folder ──
+    # ── Option 1: Use ZIP(s) from project folder (multiselect) ──
     local_zips = _get_local_zip_options()
-    local_options = ["— Select a ZIP from this folder —"] + [label for label, _ in local_zips]
-    selected_local = st.selectbox(
+    local_labels = [label for label, _ in local_zips]
+    selected_local_labels = st.multiselect(
         "ZIP files in this folder",
-        options=range(len(local_options)),
-        format_func=lambda i: local_options[i],
+        options=local_labels,
+        default=[],
         key="tab_zip_local_select",
-        index=0,
+        help="Select one or more ZIP files to include. Selected items will be combined and appear in the Select tab.",
     )
-    use_local_path: str | None = None
-    if selected_local and selected_local > 0 and local_zips:
-        _, use_local_path = local_zips[selected_local - 1]
+    selected_local_paths = [path for label, path in local_zips if label in selected_local_labels]
 
-    # ── Option 2: Upload a new ZIP ──
+    # ── Option 2: Upload one or more new ZIPs ──
     uploaded = st.file_uploader(
-        "Or upload a new ZIP",
+        "Or upload new ZIP(s)",
         type=["zip"],
-        accept_multiple_files=False,
+        accept_multiple_files=True,
         key="tab_zip_upload",
         label_visibility="collapsed",
+        help="Drag and drop or browse to add multiple ZIP files. They will be merged and appear in the Select tab.",
     )
 
-    # Decide data source: upload wins over local selection
-    data: bytes | None = None
-    zip_display_name: str = "ZIP"
-    if uploaded:
-        data = uploaded.read()
-        zip_display_name = uploaded.name
-    elif use_local_path:
-        try:
-            with open(use_local_path, "rb") as f:
-                data = f.read()
-            zip_display_name = Path(use_local_path).name
-        except Exception as e:
-            st.error(f"❌ Could not read file: {e}")
-            return
+    # Collect all ZIP data sources (local + uploaded)
+    all_zip_data: list[tuple[bytes, str]] = []  # (data, display_name)
 
-    if not data:
+    for path in selected_local_paths:
+        try:
+            with open(path, "rb") as f:
+                all_zip_data.append((f.read(), Path(path).name))
+        except Exception as e:
+            st.error(f"❌ Could not read {path}: {e}")
+
+    if uploaded:
+        for u in uploaded:
+            data = u.read()
+            all_zip_data.append((data, u.name))
+
+    # Decide: use merged data from all sources, or clear state
+    data = None
+    zip_display_name = "ZIP"
+    merged_pf: dict[int, dict[str, bytes]] | None = None
+
+    if all_zip_data:
+        if len(all_zip_data) == 1:
+            data, zip_display_name = all_zip_data[0]
+        else:
+            # Merge multiple ZIPs: combine pressure levels, same (kpa, filename) last wins
+            merged_pf = {}
+            names_used = []
+            for zip_bytes, name in all_zip_data:
+                try:
+                    pf = scan_zip_structure(zip_bytes)
+                    for kpa, files in pf.items():
+                        merged_pf.setdefault(kpa, {}).update(files)
+                    names_used.append(name)
+                except Exception as e:
+                    st.warning(f"Could not scan {name}: {e}")
+            if merged_pf:
+                zip_display_name = ", ".join(names_used[:3]) + (" …" if len(names_used) > 3 else "")
+            else:
+                merged_pf = None
+
+    if merged_pf is None and data is None:
         if "_scanned_pf" in st.session_state:
             del st.session_state["_scanned_pf"]
         if "_upload_mode" in st.session_state:
             del st.session_state["_upload_mode"]
         return
 
-    try:
-        pf = scan_zip_structure(data)
-    except Exception as e:
-        st.error(f"❌ Could not read ZIP: {e}")
-        return
+    if merged_pf is not None:
+        pf = merged_pf
+    else:
+        try:
+            pf = scan_zip_structure(data)
+        except Exception as e:
+            st.error(f"❌ Could not read ZIP: {e}")
+            return
 
     if not pf:
         st.error(
@@ -461,7 +489,10 @@ def _upload_tab_zip():
             f'</tr></thead><tbody>{rows}</tbody></table>',
             unsafe_allow_html=True,
         )
-    st.success("Go to the **Select** tab to choose pressures and points, then **Process** to run.")
+    st.success(
+        "Go to the **Select** tab to choose pressures and points, then **Process** to run."
+        + (" Selected files are combined." if len(all_zip_data) > 1 else "")
+    )
 
 
 def _upload_tab_manual():
