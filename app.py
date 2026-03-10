@@ -26,10 +26,12 @@ from ui_helpers import (
     SESSION_POINT_NAMES,
     SESSION_CONFIG,
     SESSION_LOAD_CONFIG,
+    SESSION_SAVED_CHARTS,
 )
 from upload import render_upload_tab, render_select_tab
 from features_tab import render_features_tab
 from results import render_results, render_ml_section
+from run_presets import save_run_preset
 try:
     from dl_model_tab import render_dl_model_tab
 except ImportError:
@@ -132,6 +134,27 @@ def main():
 
         if SESSION_COMPILED_DF in st.session_state:
             try:
+                # Optional: save full session locally as a preset
+                with st.expander("💾 Save this session (local preset)", expanded=False):
+                    default_name = st.session_state.get(
+                        "_last_preset_name",
+                        f"{st.session_state.get('_disp_cfg', {}).get('Finger', 'Run')} @ {st.session_state.get('_db_cfg', {}).get('speed', 0)} m/s",
+                    )
+                    preset_name = st.text_input("Preset name", value=default_name, key="preset_name_input")
+                    if st.button("Save preset (local)", key="save_preset_btn"):
+                        try:
+                            run_dir = save_run_preset(
+                                preset_name,
+                                st.session_state.get("_disp_cfg", {}),
+                                st.session_state.get("_db_cfg", {}),
+                                st.session_state[SESSION_COMPILED_DF],
+                                st.session_state.get(SESSION_SUMMARY_DF),
+                            )
+                            st.session_state["_last_preset_name"] = preset_name
+                            st.success(f"Saved preset to `{run_dir.name}` in the local `runs/` folder.")
+                        except Exception as e:
+                            st.error(f"Could not save preset: {e}")
+
                 st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
                 render_results(
                     st.session_state[SESSION_COMPILED_DF],

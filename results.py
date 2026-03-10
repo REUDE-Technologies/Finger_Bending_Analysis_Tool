@@ -19,6 +19,20 @@ import streamlit as st
 from styles import section
 from processing import to_excel_bytes
 
+# ── Chart capture for save/load sessions ──
+SESSION_SAVED_CHARTS = "_saved_chart_html"  # mirror from ui_helpers
+
+
+def _capture_chart(fig, chart_name: str):
+    """Store a Plotly figure's HTML in session_state for later save."""
+    try:
+        if SESSION_SAVED_CHARTS not in st.session_state:
+            st.session_state[SESSION_SAVED_CHARTS] = {}
+        html = fig.to_html(full_html=False, include_plotlyjs="cdn")
+        st.session_state[SESSION_SAVED_CHARTS][chart_name] = html
+    except Exception:
+        pass  # non-critical
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Geometry helpers (arc length, area, force)
@@ -183,6 +197,7 @@ def _angle_chart(df, col, title):
         yaxis=dict(gridcolor="#F1F5F9", zerolinecolor="#E2E8F0", title_font=_FONT_AXIS_TITLE, tickfont=_FONT_TICKS),
     )
     fig.update_traces(line=dict(width=2.5))
+    _capture_chart(fig, f"{col}_line")
     st.plotly_chart(fig, use_container_width=True)
 
 
@@ -222,6 +237,7 @@ def _bar_chart_by_pressure(compiled, col, title, y_label, stat_key_prefix):
         yaxis=dict(gridcolor="#F1F5F9", zerolinecolor="#E2E8F0", title_font=_FONT_AXIS_TITLE, tickfont=_FONT_TICKS),
         showlegend=False,
     )
+    _capture_chart(fig, f"{stat_key_prefix}_{stat_col}")
     st.plotly_chart(fig, use_container_width=True)
 
 
@@ -480,6 +496,7 @@ def _render_charts_tab(compiled, summary, pn, cfg):
                     yaxis=dict(gridcolor="#F1F5F9", title_font=_FONT_AXIS_TITLE, tickfont=_FONT_TICKS),
                 )
                 fig.update_traces(line=dict(width=2.5))
+                _capture_chart(fig, f"variable_{re.sub(r'[^a-zA-Z0-9]', '_', variable_col)}_line")
                 st.plotly_chart(fig, use_container_width=True)
             with disp_right:
                 _bar_chart_by_pressure(
@@ -544,6 +561,7 @@ def _render_charts_tab(compiled, summary, pn, cfg):
                 xaxis=dict(gridcolor="#F1F5F9", zerolinecolor="#E2E8F0", title_font=_FONT_AXIS_TITLE, tickfont=_FONT_TICKS),
                 yaxis=dict(gridcolor="#F1F5F9", zerolinecolor="#E2E8F0", title_font=_FONT_AXIS_TITLE, tickfont=_FONT_TICKS),
             )
+            _capture_chart(fig_time, "total_time_by_point_pressure")
             st.plotly_chart(fig_time, use_container_width=True)
 
     # ── Custom graphs: Independent configurable rows ──
