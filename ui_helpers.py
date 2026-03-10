@@ -133,7 +133,10 @@ def render_config(loaded: dict | None) -> tuple[dict, dict]:
 def render_sidebar() -> None:
     import psutil
     from run_presets import list_run_presets, load_run_preset
-    from session_store import save_session, list_saved_sessions, load_saved_session, delete_saved_session
+    from session_store import (
+        save_session, list_saved_sessions, load_saved_session,
+        delete_saved_session, get_default_saves_dir, SESSION_SAVES_PATH,
+    )
 
     with st.sidebar:
         st.markdown("### 🖥️ System Resources")
@@ -148,7 +151,29 @@ def render_sidebar() -> None:
 
         st.markdown("---")
 
-        # ── 💾 SAVE SESSION (prominent at top) ──
+        # ── 📁 SAVE PATH CONFIG ──
+        st.markdown("### 📁 Save Location")
+        default_path = st.session_state.get(SESSION_SAVES_PATH, get_default_saves_dir())
+        save_path = st.text_input(
+            "Save directory",
+            value=default_path,
+            key="_save_path_input",
+            help="Choose any folder on your machine to store saved sessions. "
+                 "Leave as default to save next to the app.",
+        )
+        # Persist the chosen path in session state
+        st.session_state[SESSION_SAVES_PATH] = save_path
+        # Quick validation
+        from pathlib import Path as _Path
+        _save_path_obj = _Path(save_path)
+        if _save_path_obj.exists() and not _save_path_obj.is_dir():
+            st.warning("⚠️ Path exists but is not a directory.")
+        else:
+            st.caption(f"📂 `{save_path}`")
+
+        st.markdown("---")
+
+        # ── 💾 SAVE SESSION ──
         st.markdown("### 💾 Save Session")
         has_data = SESSION_COMPILED_DF in st.session_state and st.session_state[SESSION_COMPILED_DF] is not None
         if has_data:
@@ -178,9 +203,10 @@ def render_sidebar() -> None:
                         summary_df=summary_df,
                         point_names=point_names,
                         chart_html_map=chart_html,
+                        saves_dir=save_path,
                     )
                     st.success(f"✅ Session saved: **{save_name}**")
-                    st.caption(f"📂 `{session_dir.name}`")
+                    st.caption(f"📂 `{session_dir}`")
                 except Exception as e:
                     st.error(f"Could not save session: {e}")
         else:
@@ -190,7 +216,7 @@ def render_sidebar() -> None:
 
         # ── 📂 LOAD SAVED SESSIONS ──
         st.markdown("### 📂 Saved Sessions")
-        saved_sessions = list_saved_sessions()
+        saved_sessions = list_saved_sessions(saves_dir=save_path)
         if saved_sessions:
             session_labels = [
                 f"{s['label']}  ({s['num_pressures']}P · {s['num_rows']}R · {s['created'][:10]})"
@@ -219,7 +245,7 @@ def render_sidebar() -> None:
                 with col_load:
                     if st.button("📥 Load Session", type="primary", use_container_width=True, key="_load_session_btn"):
                         try:
-                            data = load_saved_session(chosen["id"])
+                            data = load_saved_session(chosen["id"], saves_dir=save_path)
                             # Restore compiled and summary DataFrames
                             if data.get("compiled_df") is not None:
                                 st.session_state[SESSION_COMPILED_DF] = data["compiled_df"]
@@ -244,7 +270,7 @@ def render_sidebar() -> None:
                             st.error(f"Could not load: {e}")
                 with col_del:
                     if st.button("🗑️", help="Delete this session", key="_del_session_btn"):
-                        if delete_saved_session(chosen["id"]):
+                        if delete_saved_session(chosen["id"], saves_dir=save_path):
                             st.success("Deleted.")
                             st.rerun()
                         else:

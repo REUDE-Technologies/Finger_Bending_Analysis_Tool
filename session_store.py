@@ -1,11 +1,14 @@
 """
 Session store — save and load complete analysis sessions locally.
 
-Saves all settings, compiled/summary DataFrames, Excel export, and chart PNGs
+Saves all settings, compiled/summary DataFrames, Excel export, and chart HTMLs
 so that loading a session restores the full state without recomputation.
 
+The save directory is **user-configurable** — pass a custom `saves_dir` to any
+public function, or it defaults to a `saves/` folder next to the app.
+
 Directory layout per session:
-    saves/<timestamp>_<slug>/
+    <saves_dir>/<timestamp>_<slug>/
         session.json      — all config, metadata, point names
         compiled.csv      — compiled DataFrame
         summary.csv       — summary DataFrame (if present)
@@ -27,15 +30,23 @@ from processing import to_excel_bytes
 
 
 _APP_DIR = Path(__file__).resolve().parent
-_SAVES_DIR = _APP_DIR / "saves"
+_DEFAULT_SAVES_DIR = _APP_DIR / "saves"
+
+# Session-state key used by the sidebar to store the user's chosen path
+SESSION_SAVES_PATH = "_saves_dir_path"
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-def _ensure_saves_dir() -> Path:
-    _SAVES_DIR.mkdir(parents=True, exist_ok=True)
-    return _SAVES_DIR
+def _resolve_saves_dir(saves_dir: Optional[str | Path] = None) -> Path:
+    """Resolve and ensure the saves directory exists."""
+    if saves_dir:
+        d = Path(saves_dir).resolve()
+    else:
+        d = _DEFAULT_SAVES_DIR
+    d.mkdir(parents=True, exist_ok=True)
+    return d
 
 
 def _slugify(name: str) -> str:
@@ -44,6 +55,11 @@ def _slugify(name: str) -> str:
     while "--" in slug:
         slug = slug.replace("--", "-")
     return slug or "session"
+
+
+def get_default_saves_dir() -> str:
+    """Return the default saves directory as a string (for UI display)."""
+    return str(_DEFAULT_SAVES_DIR)
 
 
 # ---------------------------------------------------------------------------
@@ -57,9 +73,10 @@ def save_session(
     summary_df: Optional[pd.DataFrame] = None,
     point_names: Optional[List[str]] = None,
     chart_html_map: Optional[Dict[str, str]] = None,
+    saves_dir: Optional[str | Path] = None,
 ) -> Path:
     """
-    Save a full analysis session to `saves/<timestamp>_<slug>/`.
+    Save a full analysis session.
 
     Args:
         name:           Human-readable session name.
@@ -69,6 +86,7 @@ def save_session(
         summary_df:     The summary DataFrame (optional).
         point_names:    List of point names (e.g. ['p1', 'p2', ...]).
         chart_html_map: {chart_name: html_string} for chart snapshots.
+        saves_dir:      Custom directory to save into (default: saves/ next to app).
 
     Returns:
         Path to the created session directory.
@@ -76,11 +94,11 @@ def save_session(
     if compiled_df is None or compiled_df.empty:
         raise ValueError("compiled_df is empty; nothing to save")
 
-    saves_dir = _ensure_saves_dir()
+    resolved = _resolve_saves_dir(saves_dir)
     ts = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
     slug = _slugify(name)
     session_id = f"{ts}_{slug}"
-    session_dir = saves_dir / session_id
+    session_dir = resolved / session_id
     session_dir.mkdir(parents=True, exist_ok=True)
 
     # ── Session metadata (JSON) ──
@@ -146,11 +164,14 @@ def _serializable(d: Any) -> Any:
 # ---------------------------------------------------------------------------
 # List
 # ---------------------------------------------------------------------------
-def list_saved_sessions(max_items: int = 30) -> List[Dict[str, Any]]:
+def list_saved_sessions(
+    max_items: int = 30,
+    saves_dir: Optional[str | Path] = None,
+) -> List[Dict[str, Any]]:
     """Return recent saved sessions, newest first."""
-    saves_dir = _ensure_saves_dir()
+    resolved = _resolve_saves_dir(saves_dir)
     entries = []
-    for p in saves_dir.iterdir():
+    for p in resolved.iterdir():
         if p.is_dir() and (p / "session.json").is_file():
             entries.append((p.stat().st_mtime, p))
     entries.sort(reverse=True)
@@ -178,7 +199,10 @@ def list_saved_sessions(max_items: int = 30) -> List[Dict[str, Any]]:
 # ---------------------------------------------------------------------------
 # Load
 # ---------------------------------------------------------------------------
-def load_saved_session(session_id: str) -> Dict[str, Any]:
+def load_saved_session(
+    session_id: str,
+    saves_dir: Optional[str | Path] = None,
+) -> Dict[str, Any]:
     """
     Load a saved session by ID.
 
@@ -189,8 +213,8 @@ def load_saved_session(session_id: str) -> Dict[str, Any]:
         - point_names
         - chart_html_map: {chart_name: html_string}
     """
-    saves_dir = _ensure_saves_dir()
-    session_dir = saves_dir / session_id
+    resolved = _resolve_saves_dir(saves_dir)
+    session_dir = resolved / session_id
     if not session_dir.is_dir():
         raise FileNotFoundError(f"Session not found: {session_id}")
 
@@ -235,10 +259,13 @@ def load_saved_session(session_id: str) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Delete
 # ---------------------------------------------------------------------------
-def delete_saved_session(session_id: str) -> bool:
+def delete_saved_session(
+    session_id: str,
+    saves_dir: Optional[str | Path] = None,
+) -> bool:
     """Delete a saved session directory. Returns True on success."""
-    saves_dir = _ensure_saves_dir()
-    session_dir = saves_dir / session_id
+    resolved = _resolve_saves_dir(saves_dir)
+    session_dir = resolved / session_id
     if not session_dir.is_dir():
         return False
     try:
