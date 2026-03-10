@@ -23,3 +23,6 @@ Thumbs.db
 dl_training_runs/
 # ESN training saved runs
 esn_training_runs/
+# Saved sessions and local presets
+saves/
+runs/
