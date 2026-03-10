@@ -132,17 +132,17 @@ def render_config(loaded: dict | None) -> tuple[dict, dict]:
 # ═══════════════════════════════════════════════════════════════════════════
 def render_sidebar() -> None:
     import psutil
-    from run_presets import list_run_presets, load_run_preset
+    from pathlib import Path as _Path
     from session_store import (
         save_session, list_saved_sessions, load_saved_session,
         delete_saved_session, get_default_saves_dir, SESSION_SAVES_PATH,
     )
 
     with st.sidebar:
+        # ── System Resources ──
         st.markdown("### 🖥️ System Resources")
         cpu_usage = psutil.cpu_percent()
         ram_usage = psutil.virtual_memory().percent
-
         col1, col2 = st.columns(2)
         with col1:
             st.metric("CPU", f"{cpu_usage}%")
@@ -151,31 +151,40 @@ def render_sidebar() -> None:
 
         st.markdown("---")
 
-        # ── 📁 SAVE PATH CONFIG ──
+        # ══════════════════════════════════════════════════════════════════
+        # 📁 SAVE LOCATION — user picks any folder
+        # ══════════════════════════════════════════════════════════════════
         st.markdown("### 📁 Save Location")
         default_path = st.session_state.get(SESSION_SAVES_PATH, get_default_saves_dir())
         save_path = st.text_input(
-            "Save directory",
+            "Folder path",
             value=default_path,
             key="_save_path_input",
-            help="Choose any folder on your machine to store saved sessions. "
-                 "Leave as default to save next to the app.",
+            help="Type or paste any folder path. Sessions will be saved here. "
+                 "The folder is created automatically if it doesn't exist.",
         )
-        # Persist the chosen path in session state
         st.session_state[SESSION_SAVES_PATH] = save_path
-        # Quick validation
-        from pathlib import Path as _Path
-        _save_path_obj = _Path(save_path)
-        if _save_path_obj.exists() and not _save_path_obj.is_dir():
-            st.warning("⚠️ Path exists but is not a directory.")
+
+        _p = _Path(save_path)
+        if _p.exists() and not _p.is_dir():
+            st.error("⚠️ That path is a file, not a folder.")
+        elif _p.is_dir():
+            st.caption(f"✅ Folder exists")
         else:
-            st.caption(f"📂 `{save_path}`")
+            st.caption(f"📂 Will be created on first save")
 
         st.markdown("---")
 
-        # ── 💾 SAVE SESSION ──
+        # ══════════════════════════════════════════════════════════════════
+        # 💾 SAVE SESSION
+        # ══════════════════════════════════════════════════════════════════
         st.markdown("### 💾 Save Session")
-        has_data = SESSION_COMPILED_DF in st.session_state and st.session_state[SESSION_COMPILED_DF] is not None
+        has_data = (
+            SESSION_COMPILED_DF in st.session_state
+            and st.session_state[SESSION_COMPILED_DF] is not None
+            and hasattr(st.session_state[SESSION_COMPILED_DF], '__len__')
+            and len(st.session_state[SESSION_COMPILED_DF]) > 0
+        )
         if has_data:
             disp_cfg = st.session_state.get("_disp_cfg", {})
             db_cfg = st.session_state.get("_db_cfg", {})
@@ -186,9 +195,9 @@ def render_sidebar() -> None:
             ).strip()
             save_name = st.text_input(
                 "Session name", value=default_name, key="_save_session_name",
-                help="A descriptive name for this session (e.g. 'Finger1 ss960 dragon30 @ 0.5 m/s')."
             )
-            if st.button("💾 Save All Settings & Results", type="primary", use_container_width=True, key="_save_session_btn"):
+            if st.button("💾 Save All Settings & Results", type="primary",
+                         use_container_width=True, key="_save_session_btn"):
                 try:
                     compiled_df = st.session_state[SESSION_COMPILED_DF]
                     summary_df = st.session_state.get(SESSION_SUMMARY_DF)
@@ -205,145 +214,143 @@ def render_sidebar() -> None:
                         chart_html_map=chart_html,
                         saves_dir=save_path,
                     )
-                    st.success(f"✅ Session saved: **{save_name}**")
-                    st.caption(f"📂 `{session_dir}`")
+                    st.session_state["_last_save_msg"] = f"✅ Saved: {save_name}\n📂 {session_dir}"
+                    st.rerun()  # refresh session list immediately
                 except Exception as e:
-                    st.error(f"Could not save session: {e}")
+                    st.error(f"Could not save: {e}")
+
+            # Show save confirmation (survives the rerun)
+            if "_last_save_msg" in st.session_state:
+                st.success(st.session_state.pop("_last_save_msg"))
         else:
-            st.info("Process data first (📦 Upload → 🎯 Select → ⚡ Process) to enable saving.")
+            st.info("Process data first, then save here.")
 
         st.markdown("---")
 
-        # ── 📂 LOAD SAVED SESSIONS ──
+        # ══════════════════════════════════════════════════════════════════
+        # 📂 LOAD SAVED SESSIONS
+        # ══════════════════════════════════════════════════════════════════
         st.markdown("### 📂 Saved Sessions")
-        saved_sessions = list_saved_sessions(saves_dir=save_path)
+        try:
+            saved_sessions = list_saved_sessions(saves_dir=save_path)
+        except Exception:
+            saved_sessions = []
+
         if saved_sessions:
             session_labels = [
-                f"{s['label']}  ({s['num_pressures']}P · {s['num_rows']}R · {s['created'][:10]})"
+                f"{s['label']}  •  {s['num_pressures']}P · {s['num_rows']}R · {s['created'][:10]}"
                 for s in saved_sessions
             ]
-            sel_session = st.selectbox(
-                "Load saved session",
-                ["— Select a session —"] + session_labels,
+            sel_idx = st.selectbox(
+                "Select session",
+                range(len(session_labels)),
+                format_func=lambda i: session_labels[i],
                 key="_load_session_sel",
             )
-            if sel_session != "— Select a session —":
-                chosen_idx = session_labels.index(sel_session)
-                chosen = saved_sessions[chosen_idx]
+            chosen = saved_sessions[sel_idx]
 
-                # Show session details
-                with st.expander("📋 Session details", expanded=False):
-                    dcfg = chosen.get("display_config", {})
-                    dbcfg = chosen.get("db_config", {})
-                    st.caption(f"**Name:** {chosen['label']}")
-                    st.caption(f"**Created:** {chosen['created']}")
-                    st.caption(f"**Rows:** {chosen['num_rows']}  |  **Pressures:** {chosen['num_pressures']}")
-                    if dcfg:
-                        st.caption(f"**Config:** {', '.join(f'{k}: {v}' for k, v in dcfg.items() if v)}")
+            # Details expander
+            with st.expander("📋 Details", expanded=False):
+                dcfg = chosen.get("display_config", {})
+                st.markdown(f"**Name:** {chosen['label']}")
+                st.markdown(f"**Created:** {chosen['created']}")
+                st.markdown(f"**Rows:** {chosen['num_rows']}  |  **Pressures:** {chosen['num_pressures']}")
+                if dcfg:
+                    for k, v in dcfg.items():
+                        if v:
+                            st.markdown(f"**{k}:** {v}")
 
-                col_load, col_del = st.columns([3, 1])
-                with col_load:
-                    if st.button("📥 Load Session", type="primary", use_container_width=True, key="_load_session_btn"):
-                        try:
-                            data = load_saved_session(chosen["id"], saves_dir=save_path)
-                            # Restore compiled and summary DataFrames
-                            if data.get("compiled_df") is not None:
-                                st.session_state[SESSION_COMPILED_DF] = data["compiled_df"]
-                            if data.get("summary_df") is not None:
-                                st.session_state[SESSION_SUMMARY_DF] = data["summary_df"]
-                            # Restore point names
-                            if data.get("point_names"):
-                                st.session_state[SESSION_POINT_NAMES] = data["point_names"]
-                            # Restore configs
-                            if data.get("db_config"):
-                                st.session_state[SESSION_LOAD_CONFIG] = data["db_config"]
-                                st.session_state["_db_cfg"] = data["db_config"]
-                            if data.get("display_config"):
-                                st.session_state[SESSION_CONFIG] = data["display_config"]
-                                st.session_state["_disp_cfg"] = data["display_config"]
-                            # Restore chart HTML
-                            if data.get("chart_html_map"):
-                                st.session_state[SESSION_SAVED_CHARTS] = data["chart_html_map"]
-                            st.success(f"✅ Loaded session: **{chosen['label']}**")
-                            st.caption("All settings and results restored. Check tabs for results — no reprocessing needed!")
-                        except Exception as e:
-                            st.error(f"Could not load: {e}")
-                with col_del:
-                    if st.button("🗑️", help="Delete this session", key="_del_session_btn"):
-                        if delete_saved_session(chosen["id"], saves_dir=save_path):
-                            st.success("Deleted.")
-                            st.rerun()
-                        else:
-                            st.error("Could not delete.")
+            col_load, col_del = st.columns([3, 1])
+            with col_load:
+                if st.button("📥 Load & Apply", type="primary",
+                             use_container_width=True, key="_load_session_btn"):
+                    try:
+                        data = load_saved_session(chosen["id"], saves_dir=save_path)
+                        # Restore DataFrames
+                        if data.get("compiled_df") is not None:
+                            st.session_state[SESSION_COMPILED_DF] = data["compiled_df"]
+                        if data.get("summary_df") is not None:
+                            st.session_state[SESSION_SUMMARY_DF] = data["summary_df"]
+                        # Restore point names
+                        if data.get("point_names"):
+                            st.session_state[SESSION_POINT_NAMES] = data["point_names"]
+                        # Restore configs
+                        if data.get("db_config"):
+                            st.session_state[SESSION_LOAD_CONFIG] = data["db_config"]
+                            st.session_state["_db_cfg"] = data["db_config"]
+                        if data.get("display_config"):
+                            st.session_state[SESSION_CONFIG] = data["display_config"]
+                            st.session_state["_disp_cfg"] = data["display_config"]
+                        # Restore chart HTML
+                        if data.get("chart_html_map"):
+                            st.session_state[SESSION_SAVED_CHARTS] = data["chart_html_map"]
+                        st.session_state["_last_load_msg"] = f"✅ Loaded: {chosen['label']}"
+                        st.rerun()  # refresh all tabs immediately
+                    except Exception as e:
+                        st.error(f"Could not load: {e}")
+            with col_del:
+                if st.button("🗑️", help="Delete this session", key="_del_session_btn"):
+                    if delete_saved_session(chosen["id"], saves_dir=save_path):
+                        st.rerun()
+                    else:
+                        st.error("Could not delete.")
+
+            # Show load confirmation (survives the rerun)
+            if "_last_load_msg" in st.session_state:
+                st.success(st.session_state.pop("_last_load_msg"))
+                st.caption("All settings & data restored — check the **Process** tab.")
         else:
-            st.caption("No saved sessions yet. Process data and click **Save All Settings & Results** above.")
+            st.caption("No saved sessions in this folder yet.")
 
         st.markdown("---")
 
-        st.markdown("### 📖 How to Use")
-        st.markdown(
-            "1. **Configure**: Fill in the test metadata.\n"
-            "2. **Upload**: Select **Upload ZIP** to auto-detect structure or **Select & Upload** to add files manually.\n"
-            "3. **Select**: Choose the specific pressures and tracking points you want to include.\n"
-            "4. **Process**: Click the blue button to analyze.\n"
-            "5. **Save**: Click 💾 **Save All Settings & Results** in the sidebar.\n"
-            "6. **Load**: Select a saved session to restore everything instantly."
-        )
-
-        st.markdown("---")
-
-        st.markdown("### ⚡ Quick Load (Supabase)")
-        from streamlit import config
-        try:
-            host_addr = config.get_option("server.address")
-            st.caption(f"Server Binding: `{host_addr}`")
-        except Exception:
-            pass
-
+        # ══════════════════════════════════════════════════════════════════
+        # ⚡ QUICK LOAD — Supabase configs (with Apply button!)
+        # ══════════════════════════════════════════════════════════════════
         if DB_AVAILABLE:
+            st.markdown("### ⚡ Quick Load (Supabase)")
             recent = get_recent_configs(10)
             if recent:
                 labels = [
-                    f"{r.get('finger_type','?')} · W:{r.get('finger_width','?')} · By: {r.get('prepared_by','')[:10]}"
+                    f"{r.get('finger_type','?')} · L:{r.get('finger_length','?')} · "
+                    f"W:{r.get('finger_width','?')} · {r.get('body_material','?')}/{r.get('skin_material','?')} · "
+                    f"By: {r.get('prepared_by','')[:12]}"
                     for r in recent
                 ]
-                sel = st.selectbox("Load previous config", ["— New —"] + labels)
-                if sel != "— New —":
-                    st.session_state[SESSION_LOAD_CONFIG] = recent[labels.index(sel)]
-            else:
-                st.caption("No saved configs yet.")
-        else:
-            st.caption("Database not connected.")
+                sel_idx_db = st.selectbox(
+                    "Previous configs",
+                    range(len(labels)),
+                    format_func=lambda i: labels[i],
+                    key="_quick_load_sel",
+                )
+                if st.button("⚡ Apply Config", type="primary",
+                             use_container_width=True, key="_quick_load_apply"):
+                    chosen_cfg = recent[sel_idx_db]
+                    st.session_state[SESSION_LOAD_CONFIG] = chosen_cfg
+                    st.session_state["_last_quickload_msg"] = (
+                        f"✅ Config applied: {chosen_cfg.get('finger_type', '?')} — "
+                        f"check the **Config** tab."
+                    )
+                    st.rerun()
 
-        st.markdown("---")
-        st.markdown("### 💾 Legacy Presets")
-        presets = list_run_presets()
-        if presets:
-            labels = [p["label"] for p in presets]
-            sel = st.selectbox("Load legacy preset (runs/ folder)", ["— None —"] + labels)
-            if sel != "— None —":
-                chosen = presets[labels.index(sel)]
-                try:
-                    data = load_run_preset(chosen["id"])
-                    cfg = data.get("config") or {}
-                    disp_cfg = cfg.get("display_config") or {}
-                    db_cfg = cfg.get("db_config") or {}
-                    compiled_df = data.get("compiled_df")
-                    summary_df = data.get("summary_df")
-                    if compiled_df is not None:
-                        st.session_state[SESSION_COMPILED_DF] = compiled_df
-                    if summary_df is not None:
-                        st.session_state[SESSION_SUMMARY_DF] = summary_df
-                    if db_cfg:
-                        st.session_state[SESSION_LOAD_CONFIG] = db_cfg
-                        st.session_state["_db_cfg"] = db_cfg
-                    if disp_cfg:
-                        st.session_state["_disp_cfg"] = disp_cfg
-                    st.success("Loaded local preset. Check Config, Process, and other tabs.")
-                except Exception as e:
-                    st.error(f"Could not load preset: {e}")
-        else:
-            st.caption("No legacy presets.")
+                if "_last_quickload_msg" in st.session_state:
+                    st.success(st.session_state.pop("_last_quickload_msg"))
+            else:
+                st.caption("No saved configs in Supabase yet.")
+            st.markdown("---")
+
+        # ══════════════════════════════════════════════════════════════════
+        # 📖 HOW TO USE
+        # ══════════════════════════════════════════════════════════════════
+        st.markdown("### 📖 How to Use")
+        st.markdown(
+            "1. **Configure** — fill in test metadata\n"
+            "2. **Upload** — upload ZIP or add files\n"
+            "3. **Select** — pick pressures & points\n"
+            "4. **Process** — click ▶ to analyze\n"
+            "5. **Save** — 💾 sidebar button saves everything\n"
+            "6. **Load** — pick a session to restore instantly"
+        )
 
         st.markdown("---")
         st.markdown("### 📁 ZIP Layout")
@@ -354,7 +361,7 @@ def render_sidebar() -> None:
             "└── 30kpa/\n    └── …",
             language=None,
         )
-        st.caption("Folders named by pressure (kPa). Each contains point `.txt` files.")
+        st.caption("Folders named by pressure (kPa).")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
